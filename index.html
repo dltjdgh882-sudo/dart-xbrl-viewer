@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>XBRL Standard Interactive Viewer</title>
+    <!-- Google Fonts: Outfit & Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- FontAwesome icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="style.css?v=2.3">
+</head>
+<body class="light-mode">
+    <div class="app-container">
+        
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar">
+            <div class="sidebar-brand">
+                <i class="fa-solid fa-chart-line brand-icon"></i>
+                <div class="brand-text">
+                    <h1>XBRL Viewer</h1>
+                    <span class="sub-text">Interactive Frame</span>
+                </div>
+            </div>
+            
+            <div class="file-loader-card">
+                <div class="file-info">
+                    <span class="info-label">Loaded File</span>
+                    <h3 id="current-filename">Loading...</h3>
+                </div>
+                <button id="btn-upload-trigger" class="btn btn-secondary btn-sm block">
+                    <i class="fa-solid fa-cloud-arrow-up"></i> Upload ZIP Package
+                </button>
+            </div>
+            
+            <div class="sidebar-search">
+                <i class="fa-solid fa-magnifying-glass search-icon"></i>
+                <input type="text" id="sheet-search" placeholder="Search statements...">
+            </div>
+            
+            <div class="sidebar-toggle-container">
+                <div class="toggle-segmented" id="report-type-toggle">
+                    <button class="toggle-segment active" data-type="consolidated">연결재무제표</button>
+                    <button class="toggle-segment" data-type="separate">별도재무제표</button>
+                </div>
+            </div>
+            
+            <nav class="sidebar-nav">
+                <div class="nav-section">
+                    <h4 class="section-title">주요 재무제표 (Primary Statements)</h4>
+                    <ul id="primary-sheets" class="sheet-list">
+                        <!-- Populated by JS -->
+                    </ul>
+                </div>
+                <div class="nav-section">
+                    <h4 class="section-title">재무제표 주석 (Notes & Disclosures)</h4>
+                    <ul id="note-sheets" class="sheet-list">
+                        <!-- Populated by JS -->
+                    </ul>
+                </div>
+            </nav>
+        </aside>
+        
+        <!-- Main Application Area -->
+        <main class="main-content">
+            
+            <!-- Header Bar -->
+            <header class="app-header">
+                <div class="header-title">
+                    <h2 id="active-sheet-title">Statement of Financial Position</h2>
+                    <p id="active-sheet-subtitle">Select a report from the sidebar to view details</p>
+                </div>
+                
+                <div class="header-actions">
+                    <div class="scale-selector">
+                        <label for="number-scale"><i class="fa-solid fa-calculator"></i> 단위:</label>
+                        <select id="number-scale">
+                            <option value="1">원 (Unit)</option>
+                            <option value="1000">천원 (K)</option>
+                            <option value="1000000">백만원 (M)</option>
+                            <option value="1000000000" selected>십억원 (B)</option>
+                        </select>
+                    </div>
+                    
+                    <div class="dropdown-export">
+                        <button id="btn-export-dropdown" class="btn btn-primary">
+                            <i class="fa-solid fa-file-export"></i> 내보내기 <i class="fa-solid fa-chevron-down"></i>
+                        </button>
+                        <div class="dropdown-menu" id="export-menu">
+                            <a href="#" id="export-excel"><i class="fa-solid fa-file-excel text-green"></i> Excel로 저장 (.xlsx)</a>
+                            <a href="#" id="export-csv"><i class="fa-solid fa-file-csv text-blue"></i> CSV로 저장 (.csv)</a>
+                        </div>
+                    </div>
+                    
+                    <button id="theme-toggle" class="btn-icon" title="Toggle Theme">
+                        <i class="fa-solid fa-sun"></i>
+                    </button>
+                </div>
+            </header>
+            
+            <!-- Tab Controls -->
+            <div class="tab-controls-container">
+                <div class="tabs">
+                    <button class="tab-btn active" data-tab="tab-tree">
+                        <i class="fa-solid fa-network-wired"></i> 계층 트리 뷰 (Tree View)
+                    </button>
+                    <button class="tab-btn" data-tab="tab-flat">
+                        <i class="fa-solid fa-table"></i> 2차원 데이터프레임 (DataFrame)
+                    </button>
+                    <button class="tab-btn" data-tab="tab-analysis">
+                        <i class="fa-solid fa-chart-pie"></i> 재무분석 및 연산 (Analysis)
+                    </button>
+                </div>
+                
+                <div class="tab-search-wrapper" id="tree-search-wrapper">
+                    <i class="fa-solid fa-filter"></i>
+                    <input type="text" id="grid-search" placeholder="Filter terms in this sheet...">
+                </div>
+            </div>
+            
+            <!-- Dimensional Controls Bar (Visible only for multi-axis notes) -->
+            <div class="dimensional-controls-bar" id="dimensional-controls" style="display: none;">
+                <div class="control-group">
+                    <label for="axis-select"><i class="fa-solid fa-cube"></i> 표시할 차원(Axis):</label>
+                    <select id="axis-select" class="select-axis">
+                        <!-- Populated dynamically by JS -->
+                    </select>
+                </div>
+                <button id="btn-pivot-axis" class="btn btn-secondary btn-sm">
+                    <i class="fa-solid fa-arrows-rotate"></i> 축 전환 (Swap Rows/Cols)
+                </button>
+            </div>
+            
+            <!-- Tab Contents -->
+            <div class="tab-content-container">
+                
+                <!-- 1. Tree View Tab -->
+                <div class="tab-pane active" id="tab-tree">
+                    <div class="table-container card">
+                        <table class="xbrl-grid" id="xbrl-tree-grid">
+                            <thead>
+                                <tr>
+                                    <th class="col-label">계정과목 (Account Element)</th>
+                                    <th class="col-val" id="col-con-t">연결 당기</th>
+                                    <th class="col-val" id="col-con-t1">연결 전기</th>
+                                    <th class="col-val" id="col-sep-t">별도 당기</th>
+                                    <th class="col-val" id="col-sep-t1">별도 전기</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tree-grid-body">
+                                <tr>
+                                    <td colspan="100" class="grid-placeholder">
+                                        <i class="fa-solid fa-circle-notch fa-spin"></i> 로딩 중...
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                
+                <!-- 2. Flat DataFrame Tab -->
+                <div class="tab-pane" id="tab-flat">
+                    <div class="table-container card">
+                        <table class="xbrl-grid" id="xbrl-flat-grid">
+                            <thead>
+                                <tr>
+                                    <th>Parent ID</th>
+                                    <th>Label (KO)</th>
+                                    <th>Depth</th>
+                                    <th>Abstract</th>
+                                    <th id="flat-col-con-t">Cons. Current</th>
+                                    <th id="flat-col-con-t1">Cons. Prior</th>
+                                    <th id="flat-col-sep-t">Sep. Current</th>
+                                    <th id="flat-col-sep-t1">Sep. Prior</th>
+                                </tr>
+                            </thead>
+                            <tbody id="flat-grid-body">
+                                <tr>
+                                    <td colspan="100" class="grid-placeholder">
+                                        데이터프레임 로드 대기 중...
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                
+                <!-- 3. Financial Analysis Tab -->
+                <div class="tab-pane" id="tab-analysis">
+                    <div class="analysis-grid">
+                        
+                        <!-- Core Financial Ratios (Dashboard) -->
+                        <div class="analysis-column">
+                            <h3 class="panel-title"><i class="fa-solid fa-gauge-high"></i> 주요 재무비율 지표 (Detected Ratios)</h3>
+                            <div class="ratios-container" id="standard-ratios-container">
+                                <!-- Populated dynamically by JS -->
+                                <div class="ratio-card card">
+                                    <div class="ratio-info">
+                                        <h4>유동비율 (Current Ratio)</h4>
+                                        <p class="ratio-desc">유동자산 / 유동부채 (단기채무 상환능력)</p>
+                                    </div>
+                                    <div class="ratio-values">
+                                        <div class="val-box">
+                                            <span class="v-label">연결 당기</span>
+                                            <span class="v-val" id="ratio-curr-con">-</span>
+                                        </div>
+                                        <div class="val-box">
+                                            <span class="v-label">연결 전기</span>
+                                            <span class="v-val" id="ratio-prev-con">-</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="ratio-card card">
+                                    <div class="ratio-info">
+                                        <h4>부채비율 (Debt-to-Equity Ratio)</h4>
+                                        <p class="ratio-desc">총부채 / 총자본 (재무 건전성 지표)</p>
+                                    </div>
+                                    <div class="ratio-values">
+                                        <div class="val-box">
+                                            <span class="v-label">연결 당기</span>
+                                            <span class="v-val" id="ratio-debt-curr">-</span>
+                                        </div>
+                                        <div class="val-box">
+                                            <span class="v-label">연결 전기</span>
+                                            <span class="v-val" id="ratio-debt-prev">-</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="ratio-card card">
+                                    <div class="ratio-info">
+                                        <h4>영업이익률 (Operating Profit Margin)</h4>
+                                        <p class="ratio-desc">영업이익 / 매출액 (주된 영업활동 수익성)</p>
+                                    </div>
+                                    <div class="ratio-values">
+                                        <div class="val-box">
+                                            <span class="v-label">연결 당기</span>
+                                            <span class="v-val" id="ratio-op-curr">-</span>
+                                        </div>
+                                        <div class="val-box">
+                                            <span class="v-label">연결 전기</span>
+                                            <span class="v-val" id="ratio-op-prev">-</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Custom Formula Panel -->
+                        <div class="analysis-column">
+                            <h3 class="panel-title"><i class="fa-solid fa-square-root-variable"></i> 사용자정의 데이터 추출 및 연산 (Formula Panel)</h3>
+                            <div class="card formula-card">
+                                <p class="help-text">
+                                    수식에 계정과목의 <strong>Concept ID</strong>를 변수로 사용하여 연산할 수 있습니다. 
+                                    (예: <code>ifrs-full_CurrentAssets / 1000000000000</code> - 유동자산을 조단위로 변환)
+                                </p>
+                                
+                                <div class="form-group">
+                                    <label for="custom-formula-name">지표 이름 (Metric Name)</label>
+                                    <input type="text" id="custom-formula-name" placeholder="예: 순운전자본 (Net Working Capital)">
+                                </div>
+                                
+                                <div class="form-group">
+                                    <label for="custom-formula-expr">수식 (Expression)</label>
+                                    <textarea id="custom-formula-expr" rows="3" placeholder="예: ifrs-full_CurrentAssets - ifrs-full_CurrentLiabilities"></textarea>
+                                </div>
+                                
+                                <div class="formula-actions">
+                                    <button class="btn btn-secondary" id="btn-insert-concept" title="Insert selected element from grid">
+                                        <i class="fa-solid fa-plus"></i> 선택계정 삽입
+                                    </button>
+                                    <button class="btn btn-primary" id="btn-calc-formula">
+                                        <i class="fa-solid fa-play"></i> 수식 계산하기
+                                    </button>
+                                </div>
+                                
+                                <div class="formula-results" id="formula-results-box" style="display: none;">
+                                    <h4>연산 결과</h4>
+                                    <div class="results-table-wrapper">
+                                        <table class="results-table">
+                                            <thead>
+                                                <tr>
+                                                    <th>구분</th>
+                                                    <th>연결 당기</th>
+                                                    <th>연결 전기</th>
+                                                    <th>별도 당기</th>
+                                                    <th>별도 전기</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <tr>
+                                                    <td>연산값</td>
+                                                    <td id="calc-con-t">-</td>
+                                                    <td id="calc-con-t1">-</td>
+                                                    <td id="calc-sep-t">-</td>
+                                                    <td id="calc-sep-t1">-</td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    
+                                    <div class="audit-trail">
+                                        <h5>사용된 계정값 정보:</h5>
+                                        <ul id="audit-values-list">
+                                            <!-- Populated dynamically -->
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                    </div>
+                </div>
+                
+            </div>
+        </main>
+        
+        <!-- Modal: Upload ZIP Package -->
+        <div class="modal-overlay" id="upload-modal">
+            <div class="modal-box">
+                <div class="modal-header">
+                    <h3><i class="fa-solid fa-file-zipper text-purple"></i> XBRL ZIP 패키지 업로드</h3>
+                    <button class="btn-icon" id="btn-close-modal"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                <div class="modal-body">
+                    <p class="modal-desc">
+                        금융감독원(DART) 등에서 내려받은 원문 XBRL 파일이 포함된 <strong>ZIP 압축파일</strong>을 업로드해 주세요.<br>
+                        (예: <code>entityXXXX_2025-12-31.zip</code> - 내부의 .xbrl, _pre.xml, _lab-ko.xml 등이 자동 추출 및 로드됩니다)
+                    </p>
+                    
+                    <div class="drag-drop-area" id="drag-drop-zone">
+                        <i class="fa-solid fa-folder-open upload-icon"></i>
+                        <p class="main-msg">여기에 ZIP 파일을 드래그하여 놓거나 클릭하여 선택</p>
+                        <p class="sub-msg">지원 포맷: *.zip</p>
+                        <input type="file" id="file-input" accept=".zip" style="display: none;">
+                    </div>
+                    
+                    <div id="upload-status" class="upload-status" style="display: none;">
+                        <i class="fa-solid fa-circle-notch fa-spin"></i> 파일 업로드 및 분석 중...
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+    </div>
+    
+    <script src="app.js?v=2.3"></script>
+</body>
+</html>
